@@ -45,11 +45,24 @@ class RMPFlowController(mg.MotionPolicyController):
             robot_orientation=self._default_orientation,
         )
 
-    def target_reached(
-        self,
-        target_position: np.ndarray,
-        current_position: np.ndarray,
-        threshold: float = 0.01,
-    ) -> bool:
-        """end-effector가 목표 좌표에 도달했는지 확인."""
-        return np.linalg.norm(target_position - current_position) < threshold
+    # 수렴 판정용 상태
+    _prev_ee_pos = None
+    _converge_count = 0
+    CONVERGE_THRESHOLD = 0.001  # m — 이 이하로 움직이면 정지로 판정
+    CONVERGE_STEPS = 10  # 연속 N스텝
+
+    def has_converged(self, current_position: np.ndarray) -> bool:
+        """EE가 더 이상 움직이지 않으면 수렴으로 판정."""
+        if self._prev_ee_pos is not None:
+            delta = np.linalg.norm(current_position - self._prev_ee_pos)
+            if delta < self.CONVERGE_THRESHOLD:
+                self._converge_count += 1
+            else:
+                self._converge_count = 0
+        self._prev_ee_pos = current_position.copy()
+        return self._converge_count >= self.CONVERGE_STEPS
+
+    def reset_convergence(self):
+        """수렴 판정 상태 초기화."""
+        self._prev_ee_pos = None
+        self._converge_count = 0
