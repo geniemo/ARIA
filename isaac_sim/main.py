@@ -4,7 +4,6 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
-import numpy as np
 from isaacsim.core.api import World
 
 from scene.scene_builder import build_scene

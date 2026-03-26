@@ -1,6 +1,5 @@
 """Gripper 제어 — ArticulationAction 기반 open/close."""
 
-import numpy as np
 from isaacsim.robot.manipulators.grippers import ParallelGripper
 
 

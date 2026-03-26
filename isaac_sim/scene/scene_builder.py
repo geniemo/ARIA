@@ -42,15 +42,8 @@ GRIPPER_DELTAS = np.array([0.01, 0.01])
 PLACE_POSITION = np.array([0.5, 0.2, 0.42 + CUBE_SIZE / 2])
 
 # 카메라
-# USD 카메라 기본 시선: -Z축 방향
-OVERHEAD_CAM_POSITION = Gf.Vec3d(0.5, 0.0, 1.5)
-OVERHEAD_CAM_ROTATION = Gf.Vec3f(90.0, 0.0, 0.0)   # X+90 → 아래를 향함
-OVERHEAD_CAM_FOCAL_LENGTH = 18.0
-
 WRIST_CAM_OFFSET = Gf.Vec3d(0.0, 0.0, 0.08)
-WRIST_CAM_ROTATION = Gf.Vec3f(0.0, 90.0, 0.0)      # Y+90 → 손가락 방향(아래)을 향함
 WRIST_CAM_FOCAL_LENGTH = 24.0
-
 CAMERA_APERTURE = 36.0
 
 
