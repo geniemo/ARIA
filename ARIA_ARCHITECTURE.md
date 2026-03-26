@@ -467,7 +467,7 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 **1-5. 검증**
 - [O] 정상 pick-and-place end-to-end 동작 검증 (approach → close → lift → move → open)
 - [O] 9개 케이스 검증 (위치/방향/복합 변경) — 전부 성공, place 오차 < 1.5mm
-- [ ] 물체 없이 grasp 시도 → anomaly 감지 동작 확인
+- [O] 물체 없이 grasp 시도 → anomaly 감지 동작 확인 (width=0.0 → ANOMALY)
 
 ### Phase 2: Isaac Sim — 에러 주입 + HTTP 서버
 
