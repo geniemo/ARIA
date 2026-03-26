@@ -6,8 +6,10 @@ from pxr import UsdGeom, Gf
 from isaacsim.core.api import World
 from isaacsim.core.api.objects import DynamicCuboid, FixedCuboid
 from isaacsim.core.utils.stage import get_current_stage
+import isaacsim.core.utils.numpy.rotations as rot_utils
 from isaacsim.robot.manipulators import SingleManipulator
 from isaacsim.robot.manipulators.grippers import ParallelGripper
+from isaacsim.sensors.camera import Camera
 from isaacsim.storage.native import get_assets_root_path
 
 
@@ -40,12 +42,13 @@ GRIPPER_DELTAS = np.array([0.01, 0.01])
 PLACE_POSITION = np.array([0.5, 0.2, 0.42 + CUBE_SIZE / 2])
 
 # 카메라
+# USD 카메라 기본 시선: -Z축 방향
 OVERHEAD_CAM_POSITION = Gf.Vec3d(0.5, 0.0, 1.5)
-OVERHEAD_CAM_ROTATION = Gf.Vec3f(180.0, 0.0, 0.0)
+OVERHEAD_CAM_ROTATION = Gf.Vec3f(90.0, 0.0, 0.0)   # X+90 → 아래를 향함
 OVERHEAD_CAM_FOCAL_LENGTH = 18.0
 
 WRIST_CAM_OFFSET = Gf.Vec3d(0.0, 0.0, 0.08)
-WRIST_CAM_ROTATION = Gf.Vec3f(-90.0, 0.0, 0.0)
+WRIST_CAM_ROTATION = Gf.Vec3f(0.0, 90.0, 0.0)      # Y+90 → 손가락 방향(아래)을 향함
 WRIST_CAM_FOCAL_LENGTH = 24.0
 
 CAMERA_APERTURE = 36.0
@@ -155,29 +158,33 @@ def _setup_cameras() -> dict:
     """overhead 카메라 + wrist 카메라 배치.
 
     Returns:
-        {"overhead": prim_path, "wrist": prim_path}
+        {"overhead": Camera, "wrist": prim_path}
     """
     stage = get_current_stage()
-    paths = {}
+    result = {}
 
-    # Overhead 카메라 — 작업대 위 고정
-    oh_path = "/World/OverheadCamera"
-    oh_cam = UsdGeom.Camera.Define(stage, oh_path)
-    oh_cam.GetFocalLengthAttr().Set(OVERHEAD_CAM_FOCAL_LENGTH)
-    oh_cam.GetHorizontalApertureAttr().Set(CAMERA_APERTURE)
-    xf = UsdGeom.Xformable(oh_cam.GetPrim())
-    xf.AddTranslateOp().Set(OVERHEAD_CAM_POSITION)
-    xf.AddRotateXYZOp().Set(OVERHEAD_CAM_ROTATION)
-    paths["overhead"] = oh_path
+    # Overhead 카메라 — 작업대 위에서 아래를 내려다봄
+    # Isaac Sim Camera convention: [0, 90, 0] = Y축 90도 → 아래를 봄
+    overhead_cam = Camera(
+        prim_path="/World/OverheadCamera",
+        position=np.array([0.5, 0.0, 2.5]),
+        frequency=20,
+        resolution=(640, 480),
+        orientation=rot_utils.euler_angles_to_quats(
+            np.array([0, 90, 0]), degrees=True
+        ),
+    )
+    result["overhead"] = overhead_cam
 
-    # Wrist 카메라 — Franka ee_link의 자식으로 마운트
+    # Wrist 카메라 — Franka panda_hand의 자식으로 마운트 (로봇과 함께 이동)
     wrist_path = "/World/Franka/panda_hand/WristCamera"
     wrist_cam = UsdGeom.Camera.Define(stage, wrist_path)
     wrist_cam.GetFocalLengthAttr().Set(WRIST_CAM_FOCAL_LENGTH)
     wrist_cam.GetHorizontalApertureAttr().Set(CAMERA_APERTURE)
     xf = UsdGeom.Xformable(wrist_cam.GetPrim())
     xf.AddTranslateOp().Set(WRIST_CAM_OFFSET)
-    xf.AddRotateXYZOp().Set(WRIST_CAM_ROTATION)
-    paths["wrist"] = wrist_path
+    # panda_hand 로컬 좌표에서 카메라가 손가락 방향(아래)을 봐야 함
+    xf.AddRotateXYZOp().Set(Gf.Vec3f(180.0, 0.0, 0.0))
+    result["wrist"] = wrist_path
 
-    return paths
+    return result
