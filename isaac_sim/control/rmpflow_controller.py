@@ -48,11 +48,19 @@ class RMPFlowController(mg.MotionPolicyController):
     # 수렴 판정용 상태
     _prev_ee_pos = None
     _converge_count = 0
-    CONVERGE_THRESHOLD = 0.001  # m — 이 이하로 움직이면 정지로 판정
-    CONVERGE_STEPS = 10  # 연속 N스텝
+    _step_since_reset = 0
+    CONVERGE_THRESHOLD = 0.005  # m — 이 이하로 움직이면 정지로 판정
+    CONVERGE_STEPS = 20  # 연속 N스텝
+    MIN_STEPS_BEFORE_CONVERGE = 200  # 최소 이 스텝 이후부터 수렴 판정
 
     def has_converged(self, current_position: np.ndarray) -> bool:
         """EE가 더 이상 움직이지 않으면 수렴으로 판정."""
+        self._step_since_reset += 1
+
+        if self._step_since_reset < self.MIN_STEPS_BEFORE_CONVERGE:
+            self._prev_ee_pos = current_position.copy()
+            return False
+
         if self._prev_ee_pos is not None:
             delta = np.linalg.norm(current_position - self._prev_ee_pos)
             if delta < self.CONVERGE_THRESHOLD:
@@ -66,3 +74,4 @@ class RMPFlowController(mg.MotionPolicyController):
         """수렴 판정 상태 초기화."""
         self._prev_ee_pos = None
         self._converge_count = 0
+        self._step_since_reset = 0
