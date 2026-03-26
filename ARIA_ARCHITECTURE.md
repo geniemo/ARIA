@@ -438,9 +438,9 @@ PickPlaceController(Isaac Sim 내장)는 phase를 통으로 실행하여 mid-pha
 ### Phase 1: Isaac Sim — RMPFlow 기반 Pick-and-Place (1주 데드라인)
 
 **1-1. Scene 구성**
-- [ ] scene_builder.py: Franka + 작업대 + ground plane 배치
-- [ ] scene_builder.py: 큐브(물체) 배치
-- [ ] scene_builder.py: overhead 카메라 배치
+- [O] scene_builder.py: Franka + 작업대 + ground plane 배치
+- [O] scene_builder.py: 큐브(물체) 배치
+- [O] scene_builder.py: overhead 카메라 배치
 - [ ] scene_builder.py: wrist 카메라 배치
 
 **1-2. 모션 제어**
