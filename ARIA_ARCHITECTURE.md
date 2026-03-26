@@ -471,7 +471,7 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 
 ### Phase 2: Isaac Sim — 에러 주입 + HTTP 서버
 
-- [ ] error_injector.py: 시나리오 A (물체 오프셋) 에러 주입
+- [O] error_injector.py: 시나리오 A (물체 오프셋) 에러 주입
 - [ ] error_injector.py: 시나리오 B (물체 이동) 에러 주입
 - [ ] anomaly 감지 시 로봇 정지 + 카메라 캡처 동작 확인
 - [ ] sim_api.py: FastAPI HTTP 서버 (:8000) 구현
