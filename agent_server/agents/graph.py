@@ -2,7 +2,10 @@
 
 import os
 
+from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+
+load_dotenv()
 from langgraph.graph import StateGraph, END
 
 from agent_server.agents.state import AgentState
@@ -17,7 +20,7 @@ def get_model():
     global _model
     if _model is None:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-pro",
+            model="gemini-3.1-pro-preview",
             temperature=0,
             max_retries=2,
             google_api_key=os.environ.get("GOOGLE_API_KEY"),
