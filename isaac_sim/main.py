@@ -49,7 +49,11 @@ franka.initialize()
 cameras = scene_objects["camera_paths"]
 cameras["overhead"].initialize()
 
-# Wrist — replicator
+# Overhead + Wrist — replicator annotator로 통일
+oh_rp = rep.create.render_product("/World/OverheadCamera", (640, 480))
+oh_ann = rep.AnnotatorRegistry.get_annotator("rgb")
+oh_ann.attach([oh_rp])
+
 wrist_rp = rep.create.render_product(cameras["wrist"], (640, 480))
 wrist_ann = rep.AnnotatorRegistry.get_annotator("rgb")
 wrist_ann.attach([wrist_rp])
@@ -59,11 +63,11 @@ cube = scene_objects["cube"]
 
 def capture_images() -> tuple[str, str]:
     """overhead + wrist 카메라 이미지를 base64 PNG로 캡처."""
-    for _ in range(5):
+    for _ in range(30):
         world.step(render=True)
 
-    overhead_rgba = cameras["overhead"].get_rgba()
-    overhead_b64 = rgba_to_base64_png(overhead_rgba) if overhead_rgba is not None else ""
+    oh_data = oh_ann.get_data()
+    overhead_b64 = rgba_to_base64_png(oh_data) if oh_data is not None else ""
 
     wrist_data = wrist_ann.get_data()
     wrist_b64 = rgba_to_base64_png(wrist_data) if wrist_data is not None else ""

@@ -1,7 +1,7 @@
 """Pick-and-Place phase 관리 + 실행 로그 기록."""
 
 import numpy as np
-from enum import Enum, auto
+from enum import auto, Enum
 
 from contracts.schemas import ExecutionLog, RobotState
 from contracts.skill_primitives import PhaseName, PhaseStatus
@@ -18,13 +18,8 @@ class TaskState(Enum):
     ANOMALY = auto()
 
 
-# grasp 실패 판정 임계값 — 이 이하면 물체를 못 잡은 것
-GRIPPER_GRASP_THRESHOLD = 0.005  # m
-
-# approach 높이 — 큐브 위 이 높이에서 먼저 정렬 후 내려감
-APPROACH_HEIGHT = 0.15  # m
-
-# lift 높이
+GRIPPER_GRASP_THRESHOLD = 0.005  # m — 이 이하면 물체를 못 잡은 것
+APPROACH_HEIGHT = 0.15  # m — 큐브 위 이 높이에서 먼저 정렬 후 내려감
 LIFT_HEIGHT = 0.15  # m
 
 
@@ -49,29 +44,23 @@ class PickPlaceTask:
         self._gripper_ctrl = gripper_ctrl
         self._articulation_controller = franka.get_articulation_controller()
 
-        # 좌표
         self._grasp_position = grasp_position.copy()
-
         self._approach_position = self._grasp_position.copy()
         self._approach_position[2] += APPROACH_HEIGHT
-
         self._lift_position = self._grasp_position.copy()
         self._lift_position[2] += LIFT_HEIGHT
-
         self._place_position = place_position.copy()
-
         self._place_above_position = self._place_position.copy()
         self._place_above_position[2] += APPROACH_HEIGHT
-
         self._orientation = grasp_orientation.copy() if grasp_orientation is not None else None
 
-        # 상태
         self._state = TaskState.IDLE
         self._current_phase: PhaseName | None = None
         self._step_count = 0
         self._phase_start_step = 0
         self._execution_log: list[ExecutionLog] = []
         self._trajectory_planned = False
+        self._sub_phase = 0  # approach/move의 2단계 (0: high, 1: low)
 
     @property
     def state(self) -> TaskState:
@@ -82,44 +71,29 @@ class PickPlaceTask:
         return self._execution_log
 
     def start(self) -> None:
-        """태스크 시작."""
         self._state = TaskState.RUNNING
         self._execution_log = []
         self._step_count = 0
         self._enter_phase(PhaseName.APPROACH)
 
-    def _stop_robot(self) -> None:
-        """로봇을 즉시 정지시킨다."""
-        joint_positions = self._franka.get_joint_positions()
-        self._articulation_controller.apply_action(
-            ArticulationAction(
-                joint_positions=joint_positions,
-                joint_velocities=np.zeros_like(joint_positions),
-            )
-        )
-
     def step(self) -> TaskState:
-        """매 시뮬레이션 스텝마다 호출."""
         if self._state != TaskState.RUNNING:
             return self._state
 
         self._step_count += 1
-
-        if self._current_phase == PhaseName.APPROACH:
-            self._step_approach()
-        elif self._current_phase == PhaseName.CLOSE_GRIPPER:
-            self._step_close_gripper()
-        elif self._current_phase == PhaseName.LIFT:
-            self._step_lift()
-        elif self._current_phase == PhaseName.MOVE:
-            self._step_move()
-        elif self._current_phase == PhaseName.OPEN_GRIPPER:
-            self._step_open_gripper()
-
+        phase_handlers = {
+            PhaseName.APPROACH: self._step_approach,
+            PhaseName.CLOSE_GRIPPER: self._step_close_gripper,
+            PhaseName.LIFT: self._step_lift,
+            PhaseName.MOVE: self._step_move,
+            PhaseName.OPEN_GRIPPER: self._step_open_gripper,
+        }
+        handler = phase_handlers.get(self._current_phase)
+        if handler:
+            handler()
         return self._state
 
     def get_robot_state(self) -> RobotState:
-        """현재 로봇 상태."""
         ee_pos, _ = self._franka.end_effector.get_world_pose()
         joint_positions = self._franka.get_joint_positions().tolist()
         return RobotState(
@@ -128,13 +102,21 @@ class PickPlaceTask:
             joint_positions=joint_positions[:7],
         )
 
-    # --- Phase 실행 (RRT trajectory 기반) ---
+    # --- 로봇 제어 ---
 
-    def _move_to(self, target_position: np.ndarray) -> bool | None:
-        """RRT로 목표까지 이동. Returns: True=도달, False=계획실패, None=진행중."""
+    def _stop_robot(self) -> None:
+        joint_positions = self._franka.get_joint_positions()
+        self._articulation_controller.apply_action(
+            ArticulationAction(
+                joint_positions=joint_positions,
+                joint_velocities=np.zeros_like(joint_positions),
+            )
+        )
+
+    def _move_to(self, target: np.ndarray) -> bool | None:
+        """RRT로 이동. True=도달, False=계획실패, None=진행중."""
         if not self._trajectory_planned:
-            success = self._rrt.compute_plan(target_position, self._orientation)
-            if not success:
+            if not self._rrt.compute_plan(target, self._orientation):
                 return False
             self._trajectory_planned = True
 
@@ -145,83 +127,72 @@ class PickPlaceTask:
         if self._rrt.is_done():
             self._trajectory_planned = False
             return True
+        return None
 
-        return None  # 진행 중
+    def _set_anomaly(self, reason: str) -> None:
+        self._state = TaskState.ANOMALY
+        self._stop_robot()
+        self._complete_phase(reason=reason)
+
+    # --- Phase 실행 ---
+
+    def _step_two_stage_move(self, high_target: np.ndarray, low_target: np.ndarray,
+                              on_complete, fail_reason_high: str, fail_reason_low: str) -> None:
+        """2단계 이동 (high → low) 공통 로직."""
+        target = high_target if self._sub_phase == 0 else low_target
+        result = self._move_to(target)
+
+        if result is True:
+            if self._sub_phase == 0:
+                self._sub_phase = 1
+            else:
+                on_complete()
+        elif result is False:
+            reason = fail_reason_high if self._sub_phase == 0 else fail_reason_low
+            self._set_anomaly(reason)
 
     def _step_approach(self) -> None:
-        """approach 위치 → grasp 위치로 2단계 이동."""
-        if not hasattr(self, '_approach_phase'):
-            self._approach_phase = 0  # 0: 높은 위치, 1: grasp 위치
+        def on_complete():
+            self._complete_phase()
+            self._enter_phase(PhaseName.CLOSE_GRIPPER)
+            self._gripper_ctrl.close()
 
-        if self._approach_phase == 0:
-            result = self._move_to(self._approach_position)
-            if result is True:
-                self._approach_phase = 1
-            elif result is False:
-                self._state = TaskState.ANOMALY
-                self._stop_robot()
-                self._complete_phase(reason="approach_plan_failed")
-        elif self._approach_phase == 1:
-            result = self._move_to(self._grasp_position)
-            if result is True:
-                self._complete_phase()
-                self._enter_phase(PhaseName.CLOSE_GRIPPER)
-                self._gripper_ctrl.close()
-            elif result is False:
-                self._state = TaskState.ANOMALY
-                self._stop_robot()
-                self._complete_phase(reason="descend_plan_failed")
+        self._step_two_stage_move(
+            self._approach_position, self._grasp_position,
+            on_complete, "approach_plan_failed", "descend_plan_failed",
+        )
 
     def _step_close_gripper(self) -> None:
-        """gripper 닫기."""
         self._franka.gripper.close()
         if self._gripper_ctrl.is_done():
             width = self._gripper_ctrl.get_width()
             self._complete_phase(gripper_width_final=width)
-
             if width < GRIPPER_GRASP_THRESHOLD:
                 self._state = TaskState.ANOMALY
                 self._stop_robot()
-                return
-
-            self._enter_phase(PhaseName.LIFT)
+            else:
+                self._enter_phase(PhaseName.LIFT)
 
     def _step_lift(self) -> None:
-        """물체를 들어올림."""
         result = self._move_to(self._lift_position)
         if result is True:
             self._complete_phase()
             self._enter_phase(PhaseName.MOVE)
         elif result is False:
-            self._state = TaskState.ANOMALY
-            self._complete_phase(reason="lift_plan_failed")
+            self._set_anomaly("lift_plan_failed")
 
     def _step_move(self) -> None:
-        """place 위 높은 위치 → place 위치로 2단계 이동."""
-        if not hasattr(self, '_move_phase'):
-            self._move_phase = 0
+        def on_complete():
+            self._complete_phase()
+            self._enter_phase(PhaseName.OPEN_GRIPPER)
+            self._gripper_ctrl.open()
 
-        if self._move_phase == 0:
-            result = self._move_to(self._place_above_position)
-            if result is True:
-                self._move_phase = 1
-            elif result is False:
-                self._state = TaskState.ANOMALY
-                self._stop_robot()
-                self._complete_phase(reason="move_plan_failed")
-        elif self._move_phase == 1:
-            result = self._move_to(self._place_position)
-            if result is True:
-                self._complete_phase()
-                self._enter_phase(PhaseName.OPEN_GRIPPER)
-                self._gripper_ctrl.open()
-            elif result is False:
-                self._state = TaskState.ANOMALY
-                self._stop_robot()
-                self._complete_phase(reason="place_descend_plan_failed")
+        self._step_two_stage_move(
+            self._place_above_position, self._place_position,
+            on_complete, "move_plan_failed", "place_descend_plan_failed",
+        )
 
     def _step_open_gripper(self) -> None:
-        """gripper 열기."""
         self._franka.gripper.open()
         if self._gripper_ctrl.is_done():
             width = self._gripper_ctrl.get_width()
@@ -231,25 +202,18 @@ class PickPlaceTask:
     # --- Phase 관리 ---
 
     def _enter_phase(self, phase: PhaseName) -> None:
-        """새 phase 진입."""
         self._current_phase = phase
         self._phase_start_step = self._step_count
         self._trajectory_planned = False
-        self._gripper_ctrl._reset_settle()
-        # sub-phase 상태 초기화
-        if hasattr(self, '_approach_phase'):
-            del self._approach_phase
-        if hasattr(self, '_move_phase'):
-            del self._move_phase
+        self._sub_phase = 0
+        self._gripper_ctrl.reset_settle()
 
     def _complete_phase(self, gripper_width_final: float | None = None, reason: str | None = None) -> None:
-        """현재 phase 완료 기록."""
-        duration = self._step_count - self._phase_start_step
         self._execution_log.append(
             ExecutionLog(
                 phase=self._current_phase,
                 status=PhaseStatus.COMPLETED if reason is None else PhaseStatus.ABORTED,
-                duration_steps=duration,
+                duration_steps=self._step_count - self._phase_start_step,
                 gripper_width_final=gripper_width_final,
                 reason=reason,
             )

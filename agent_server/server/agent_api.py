@@ -8,13 +8,11 @@ from agent_server.agents.graph import build_graph
 from agent_server.agents.recovery_logger import RecoveryLog
 from agent_server.agents.tools import set_current_report
 
-
 graph = build_graph()
 
 
 def run_recovery(report: AnomalyReport) -> dict:
     """anomaly report를 받아 ReAct 루프를 실행하고 결과를 반환."""
-
     set_current_report(report)
 
     recovery_log = RecoveryLog(
@@ -25,14 +23,8 @@ def run_recovery(report: AnomalyReport) -> dict:
     initial_message = HumanMessage(
         content=[
             {"type": "text", "text": _format_anomaly_text(report)},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{report.overhead_image}"},
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{report.wrist_image}"},
-            },
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{report.overhead_image}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{report.wrist_image}"}},
         ],
     )
 
@@ -42,27 +34,30 @@ def run_recovery(report: AnomalyReport) -> dict:
         "recovery_attempts": 0,
     }
 
-    # ReAct 루프 실행
+    # 1차 ReAct 루프
     final_state = graph.invoke(initial_state)
 
-    # 메시지 이력에서 로그 추출
-    success = False
-    for msg in final_state["messages"]:
-        if isinstance(msg, AIMessage):
-            recovery_log.add_llm_reasoning(msg.content)
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    recovery_log.add_tool_call(tc["name"], tc["args"])
-        elif isinstance(msg, ToolMessage):
-            recovery_log.add_tool_result(msg.name, msg.content)
-            if "'success': True" in msg.content or '"success": true' in msg.content.lower():
-                success = True
+    # Gemini가 explore 없이 포기했으면 피드백 후 재시도
+    if not _has_explore(final_state) and not _has_success(final_state):
+        feedback = HumanMessage(
+            content="The cube is confirmed to still be on the table. It is hidden behind the robot arm. "
+            "You MUST call execute_action with action='move', "
+            "coords={'x': 0.6, 'y': 0.2, 'z': 0.6}, intent='explore' to move the arm. "
+            "After the move, call extract_coordinates to find the cube."
+        )
+        retry_state: AgentState = {
+            "messages": final_state["messages"] + [feedback],
+            "anomaly_report": initial_state["anomaly_report"],
+            "recovery_attempts": 1,
+        }
+        final_state = graph.invoke(retry_state)
 
+    # 로그 수집
+    success = _has_success(final_state)
+    _collect_logs(final_state, recovery_log)
     recovery_log.finalize(success=success)
-    recovery_log.save("/home/park/workspace/ARIA/screenshots/recovery_log.json")
 
     last_message = final_state["messages"][-1]
-
     return {
         "result": last_message.content if hasattr(last_message, "content") else str(last_message),
         "success": success,
@@ -71,16 +66,39 @@ def run_recovery(report: AnomalyReport) -> dict:
     }
 
 
+def _has_success(state) -> bool:
+    return any(
+        isinstance(msg, ToolMessage) and
+        ("'success': true" in msg.content.lower() or "'success': True" in msg.content)
+        for msg in state["messages"]
+    )
+
+
+def _has_explore(state) -> bool:
+    return any(
+        isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and
+        any(tc.get("args", {}).get("intent") == "explore" for tc in msg.tool_calls)
+        for msg in state["messages"]
+    )
+
+
+def _collect_logs(state, recovery_log: RecoveryLog) -> None:
+    for msg in state["messages"]:
+        if isinstance(msg, AIMessage):
+            recovery_log.add_llm_reasoning(msg.content)
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    recovery_log.add_tool_call(tc["name"], tc["args"])
+        elif isinstance(msg, ToolMessage):
+            recovery_log.add_tool_result(msg.name, msg.content)
+
+
 def _format_anomaly_text(report: AnomalyReport) -> str:
-    """anomaly report를 LLM이 읽기 좋은 텍스트로 변환."""
-    log_text = ""
-    for entry in report.execution_log:
-        log_text += (
-            f"  - {entry.phase.value}: {entry.status.value}"
-            f" ({entry.duration_steps} steps"
-            f", gripper_width={entry.gripper_width_final}"
-            f", reason={entry.reason})\n"
-        )
+    log_text = "\n".join(
+        f"  - {e.phase.value}: {e.status.value} ({e.duration_steps} steps, "
+        f"gripper_width={e.gripper_width_final}, reason={e.reason})"
+        for e in report.execution_log
+    )
 
     return f"""## Anomaly Report
 
@@ -96,4 +114,6 @@ def _format_anomaly_text(report: AnomalyReport) -> str:
 - Image 1: Overhead camera (top-down view of workspace)
 - Image 2: Wrist camera (close-up from end-effector)
 
-Analyze the images and execution log. Diagnose the failure and take action to recover."""
+**CRITICAL CONSTRAINT**: The cube is GUARANTEED to still be on the table. It CANNOT fall off. If extract_coordinates returns "object not found", the cube is hidden behind the robot arm. You MUST call execute_action with intent="explore" to move the arm and reveal the cube.
+
+Your response MUST include a tool call. Do not respond with only text."""

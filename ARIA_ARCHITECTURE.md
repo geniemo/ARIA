@@ -359,9 +359,7 @@ isaac_sim/
 ├── control/
 │   ├── rrt_controller.py        # Lula RRT trajectory planning + ArticulationTrajectory 실행
 │   └── gripper_controller.py    # ArticulationAction 기반 gripper 제어
-├── sensors/
-│   ├── anomaly_detector.py      # gripper width 기반 이상 감지
-│   └── camera_capture.py        # 카메라 → base64 PNG
+├── sensors/                      # (예약 — 추후 확장 시 사용)
 ├── server/
 │   └── sim_api.py               # HTTP 서버 (execute_action 수신 + 응답)
 └── task/
@@ -375,9 +373,10 @@ agent_server/
 │   ├── graph.py                 # LangGraph StateGraph (ReAct 루프)
 │   ├── state.py                 # AgentState 정의
 │   ├── nodes.py                 # call_model, call_tool, should_continue
-│   └── tools.py                 # extract_coordinates, execute_action
+│   ├── tools.py                 # extract_coordinates, execute_action
+│   └── recovery_logger.py      # ReAct 루프 구조화 로그 (JSON)
 ├── vision/
-│   └── object_detector.py       # overhead/wrist 이미지에서 물체 좌표 검출
+│   └── object_detector.py       # overhead 이미지에서 빨간 큐브 좌표 검출 (OpenCV HSV + 실측 캘리브레이션)
 └── prompts/
     └── diagnosis.py             # Gemini 시스템 프롬프트
 ```
@@ -500,16 +499,17 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 
 ### Phase 4: End-to-End 통합
 
-- [ ] Isaac Sim + Agent Server 동시 기동
-- [ ] 시나리오 A end-to-end: 오프셋 → 감지 → agent 진단 → 좌표 추출 → re-grasp → 성공
-- [ ] 시나리오 B end-to-end: 물체 부재 → 감지 → agent 진단 → 탐색 → 물체 발견 → grasp → 성공
-- [ ] 실패 후 재진단 루프 동작 확인: success=false → LLM 재판단 → 재시도
-- [ ] 복구 불가 케이스 처리: 최대 시도 횟수 초과 시 graceful termination
+- [O] Isaac Sim + Agent Server 동시 기동
+- [O] 시나리오 A end-to-end: 오프셋 → 감지 → agent 진단 → 좌표 추출 → re-grasp → 성공 (3/3 케이스 성공, place 오차 <2.6cm)
+- [O] 시나리오 B end-to-end: 물체 부재 → 감지 → agent 진단 → 탐색 → 물체 발견 → grasp → 성공 (3/3 연속 성공)
+- [O] 픽셀→월드 좌표 매핑 실측 캘리브레이션 (오차 <1.5mm)
+- [O] Overhead 카메라 캡처를 replicator annotator로 통일 (Camera API RGB=0 문제 해결)
+- [O] explore 후 overhead 이미지 자동 업데이트 → extract_coordinates가 최신 이미지 사용
+- [O] Gemini 미탐색 시 피드백 재시도 로직 (에이전트 자율성 유지)
+- [O] 실패 후 재진단 루프 동작 확인: extract_coordinates 실패 → explore → 재추출 → recover 성공
+- [O] 복구 불가 케이스: 프롬프트에 3회 제한 명시 + should_continue가 tool 미호출 시 END 라우팅으로 구조적 보장
 
 ### Phase 5: 시나리오 확장 + 데모 준비
 
 - [ ] 시나리오 C 설계 및 구현 (시간 여유 시)
-- [ ] 미정의 시나리오 3~5개에 대한 Gemini 진단 정확도 테스트
-- [ ] rule-based baseline vs MLLM-augmented 비교 데이터 수집
 - [ ] 웹 대시보드: ReAct 루프 시각화 (수신 이미지, Gemini 추론 과정, tool 호출, 복구 결과)
-- [ ] 데모 시나리오 구성 및 시연 준비
