@@ -21,11 +21,11 @@ IMAGE_HEIGHT = 480
 TABLE_TOP_Z = 0.40  # table position[2] + scale[2]/2 = 0.2 + 0.2
 CUBE_Z = 0.44  # 큐브 중심 높이 (0.42 + 0.04/2), scene_builder 기준
 
-# FOV 기반 픽셀 → 월드 변환 계수
-# Isaac Sim Camera focal_length=18, horizontal_aperture=36 → FOV ≈ 90°
-# 높이 2.5m에서 작업대(z=0.4)까지 거리 ≈ 2.1m
-# 이 거리에서 화면이 커버하는 실제 영역을 기반으로 계수 계산
-CAMERA_TO_TABLE_DIST = CAMERA_HEIGHT - TABLE_TOP_Z  # ~2.08m
+# 실측 기반 픽셀 → 월드 변환 스케일 계수
+# 여러 큐브 위치에서 실제 좌표와 픽셀 좌표를 비교하여 도출
+# px_norm (이미지 가로) → world_y, py_norm (이미지 세로) → world_x
+SCALE_PX_TO_WORLD_Y = 0.865  # px_norm 1.0 → 0.865m
+SCALE_PY_TO_WORLD_X = 0.644  # py_norm 1.0 → 0.644m
 
 
 def _base64_to_cv2(image_base64: str) -> np.ndarray:
@@ -84,26 +84,16 @@ def _detect_red_cube(bgr_image: np.ndarray) -> tuple[float, float] | None:
 def _pixel_to_world(cx: float, cy: float) -> dict:
     """overhead 카메라의 픽셀 좌표 → 월드 좌표 변환.
 
-    overhead 카메라가 [0.5, 0, 2.5]에서 아래를 보고 있으므로,
-    픽셀 중심이 월드 [0.5, 0]에 대응한다.
+    실측 데이터 기반 선형 매핑:
+    - 이미지 가로(px) → 월드 Y (반비례)
+    - 이미지 세로(py) → 월드 X (반비례)
+    - 이미지 중심 → 카메라 위치 [0.5, 0]
     """
-    # Isaac Sim Camera with euler [0, 90, 0]:
-    # 이미지 X축 → 월드 -Y 방향
-    # 이미지 Y축 → 월드 +X 방향
-    # (카메라가 Y축 90도 회전되어 있으므로)
-
-    # 픽셀 중심으로부터의 오프셋 (정규화: -0.5 ~ 0.5)
     px_norm = (cx / IMAGE_WIDTH) - 0.5
     py_norm = (cy / IMAGE_HEIGHT) - 0.5
 
-    # FOV 기반 실제 거리 계산
-    # focal_length=18, horizontal_aperture=36 → tan(hfov/2) = 36/(2*18) = 1.0
-    half_width_world = CAMERA_TO_TABLE_DIST * 1.0  # tan(45°) = 1.0
-    half_height_world = half_width_world * (IMAGE_HEIGHT / IMAGE_WIDTH)
-
-    # 픽셀 → 월드 매핑
-    world_x = CAMERA_POSITION[0] + py_norm * 2 * half_height_world
-    world_y = CAMERA_POSITION[1] - px_norm * 2 * half_width_world
+    world_x = CAMERA_POSITION[0] - py_norm * SCALE_PY_TO_WORLD_X
+    world_y = CAMERA_POSITION[1] - px_norm * SCALE_PX_TO_WORLD_Y
 
     return {
         "x": round(float(world_x), 4),
