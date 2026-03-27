@@ -1,10 +1,11 @@
 """Agent Server API — POST /anomaly → ReAct 루프 실행."""
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from contracts.schemas import AnomalyReport
 from agent_server.agents.state import AgentState
 from agent_server.agents.graph import build_graph
+from agent_server.agents.recovery_logger import RecoveryLog
 
 
 graph = build_graph()
@@ -13,7 +14,11 @@ graph = build_graph()
 def run_recovery(report: AnomalyReport) -> dict:
     """anomaly report를 받아 ReAct 루프를 실행하고 결과를 반환."""
 
-    # 초기 메시지: 이미지 + 센서 + 로그를 LLM에 전달
+    recovery_log = RecoveryLog(
+        overhead_image_b64=report.overhead_image,
+        wrist_image_b64=report.wrist_image,
+    )
+
     initial_message = HumanMessage(
         content=[
             {"type": "text", "text": _format_anomaly_text(report)},
@@ -37,11 +42,29 @@ def run_recovery(report: AnomalyReport) -> dict:
     # ReAct 루프 실행
     final_state = graph.invoke(initial_state)
 
-    # 마지막 메시지에서 결과 추출
+    # 메시지 이력에서 로그 추출
+    success = False
+    for msg in final_state["messages"]:
+        if isinstance(msg, AIMessage):
+            recovery_log.add_llm_reasoning(msg.content)
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    recovery_log.add_tool_call(tc["name"], tc["args"])
+        elif isinstance(msg, ToolMessage):
+            recovery_log.add_tool_result(msg.name, msg.content)
+            if "'success': True" in msg.content or '"success": true' in msg.content.lower():
+                success = True
+
+    recovery_log.finalize(success=success)
+    recovery_log.save("/home/park/workspace/ARIA/screenshots/recovery_log.json")
+
     last_message = final_state["messages"][-1]
+
     return {
-        "result": last_message.content,
-        "total_messages": len(final_state["messages"]),
+        "result": last_message.content if hasattr(last_message, "content") else str(last_message),
+        "success": success,
+        "total_steps": len(recovery_log.steps),
+        "log": recovery_log.to_dict(),
     }
 
 
