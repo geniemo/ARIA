@@ -41,10 +41,6 @@ GRIPPER_DELTAS = np.array([0.01, 0.01])
 # Place 위치 — 작업대 오른쪽
 PLACE_POSITION = np.array([0.5, 0.2, 0.42 + CUBE_SIZE / 2])
 
-# 카메라
-WRIST_CAM_OFFSET = Gf.Vec3d(0.0, 0.0, 0.08)
-WRIST_CAM_FOCAL_LENGTH = 24.0
-CAMERA_APERTURE = 36.0
 
 
 def build_scene(world: World) -> dict:
@@ -151,9 +147,8 @@ def _setup_cameras() -> dict:
     """overhead 카메라 + wrist 카메라 배치.
 
     Returns:
-        {"overhead": Camera, "wrist": prim_path}
+        {"overhead": Camera, "wrist": Camera}
     """
-    stage = get_current_stage()
     result = {}
 
     # Overhead 카메라 — 작업대 위에서 아래를 내려다봄
@@ -169,15 +164,16 @@ def _setup_cameras() -> dict:
     )
     result["overhead"] = overhead_cam
 
-    # Wrist 카메라 — Franka panda_hand의 자식으로 마운트 (로봇과 함께 이동)
+    # Wrist 카메라 — panda_hand 바깥에 마운트, finger 방향을 봄
+    stage = get_current_stage()
     wrist_path = "/World/Franka/panda_hand/WristCamera"
     wrist_cam = UsdGeom.Camera.Define(stage, wrist_path)
-    wrist_cam.GetFocalLengthAttr().Set(WRIST_CAM_FOCAL_LENGTH)
-    wrist_cam.GetHorizontalApertureAttr().Set(CAMERA_APERTURE)
+    wrist_cam.GetFocalLengthAttr().Set(15.0)
+    wrist_cam.GetHorizontalApertureAttr().Set(36.0)
+    wrist_cam.GetClippingRangeAttr().Set(Gf.Vec2f(0.01, 10.0))
     xf = UsdGeom.Xformable(wrist_cam.GetPrim())
-    xf.AddTranslateOp().Set(WRIST_CAM_OFFSET)
-    # panda_hand 로컬 좌표에서 카메라가 손가락 방향(아래)을 봐야 함
-    xf.AddRotateXYZOp().Set(Gf.Vec3f(180.0, 0.0, 0.0))
+    xf.AddTranslateOp().Set(Gf.Vec3d(-0.045, 0.006, -0.013))
+    xf.AddRotateXYZOp().Set(Gf.Vec3f(180.0, 0.0, 0.0))  # +Z(finger 방향)을 봄
     result["wrist"] = wrist_path
 
     return result

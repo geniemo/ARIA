@@ -7,6 +7,7 @@ from contracts.schemas import ExecutionLog, RobotState
 from contracts.skill_primitives import PhaseName, PhaseStatus
 from control.rrt_controller import RRTController
 from control.gripper_controller import GripperController
+from isaacsim.core.utils.types import ArticulationAction
 
 
 class TaskState(Enum):
@@ -87,6 +88,16 @@ class PickPlaceTask:
         self._step_count = 0
         self._enter_phase(PhaseName.APPROACH)
 
+    def _stop_robot(self) -> None:
+        """로봇을 즉시 정지시킨다."""
+        joint_positions = self._franka.get_joint_positions()
+        self._articulation_controller.apply_action(
+            ArticulationAction(
+                joint_positions=joint_positions,
+                joint_velocities=np.zeros_like(joint_positions),
+            )
+        )
+
     def step(self) -> TaskState:
         """매 시뮬레이션 스텝마다 호출."""
         if self._state != TaskState.RUNNING:
@@ -148,6 +159,7 @@ class PickPlaceTask:
                 self._approach_phase = 1
             elif result is False:
                 self._state = TaskState.ANOMALY
+                self._stop_robot()
                 self._complete_phase(reason="approach_plan_failed")
         elif self._approach_phase == 1:
             result = self._move_to(self._grasp_position)
@@ -157,6 +169,7 @@ class PickPlaceTask:
                 self._gripper_ctrl.close()
             elif result is False:
                 self._state = TaskState.ANOMALY
+                self._stop_robot()
                 self._complete_phase(reason="descend_plan_failed")
 
     def _step_close_gripper(self) -> None:
@@ -168,6 +181,7 @@ class PickPlaceTask:
 
             if width < GRIPPER_GRASP_THRESHOLD:
                 self._state = TaskState.ANOMALY
+                self._stop_robot()
                 return
 
             self._enter_phase(PhaseName.LIFT)
@@ -193,6 +207,7 @@ class PickPlaceTask:
                 self._move_phase = 1
             elif result is False:
                 self._state = TaskState.ANOMALY
+                self._stop_robot()
                 self._complete_phase(reason="move_plan_failed")
         elif self._move_phase == 1:
             result = self._move_to(self._place_position)
@@ -202,6 +217,7 @@ class PickPlaceTask:
                 self._gripper_ctrl.open()
             elif result is False:
                 self._state = TaskState.ANOMALY
+                self._stop_robot()
                 self._complete_phase(reason="place_descend_plan_failed")
 
     def _step_open_gripper(self) -> None:
