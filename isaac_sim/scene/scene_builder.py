@@ -155,7 +155,7 @@ def _setup_cameras() -> dict:
     # Isaac Sim Camera convention: [0, 90, 0] = Y축 90도 → 아래를 봄
     overhead_cam = Camera(
         prim_path="/World/OverheadCamera",
-        position=np.array([0.5, 0.0, 3.0]),
+        position=np.array([0.5, 0.0, 2.5]),
         frequency=20,
         resolution=(640, 480),
         orientation=rot_utils.euler_angles_to_quats(

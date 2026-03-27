@@ -44,7 +44,7 @@ def inject_absence(cube: DynamicCuboid, displaced_pos: np.ndarray | None = None)
     if displaced_pos is None:
         # 작업대 위, 원래 위치 반대편 (로봇 팔 뒤쪽)
         # 작업대: x=[0.2, 0.8], y=[-0.4, 0.4], 상단 z=0.42
-        displaced_pos = np.array([0.7, 0.25, 0.44])
+        displaced_pos = np.array([0.3, -0.15, 0.44])
 
     cube.set_world_pose(position=displaced_pos)
     return displaced_pos
