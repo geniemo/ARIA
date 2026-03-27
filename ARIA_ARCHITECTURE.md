@@ -487,15 +487,16 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 
 ### Phase 3: Agent Server — ReAct 파이프라인
 
-- [ ] agent_server/main.py: uvicorn :8001 세팅
-- [ ] state.py: AgentState 정의
-- [ ] prompts/diagnosis.py: Gemini 시스템 프롬프트 작성 (역할, 입력 포맷, 출력 포맷, tool 사용 지침)
-- [ ] tools.py: extract_coordinates 구현 (OpenCV 기반 좌표 추출)
-- [ ] tools.py: execute_action 구현 (Isaac Sim에 HTTP POST)
-- [ ] nodes.py: call_model, call_tool, should_continue 구현
-- [ ] graph.py: StateGraph 조립 (llm → should_continue → tools → llm 루프)
-- [ ] agent_api.py: POST /anomaly → AgentState 초기화 → graph 실행 → 결과 반환
-- [ ] Agent Server 단독 테스트: mock anomaly report로 graph 실행, tool 호출 확인
+- [O] agent_server/main.py: uvicorn :8001 + POST /anomaly 엔드포인트
+- [O] state.py: AgentState (messages + anomaly_report + recovery_attempts)
+- [O] prompts/diagnosis.py: 시스템 프롬프트 (환경 정보, 5단계 추론 프로세스, few-shot 예시, 안전 범위)
+- [O] tools.py: extract_coordinates (파라미터 없이 anomaly report의 overhead 이미지 자동 사용) + execute_action (Isaac Sim HTTP POST)
+- [O] vision/object_detector.py: HSV 빨간 큐브 검출 + 픽셀→월드 좌표 변환 (축 매핑은 Phase 4에서 검증)
+- [O] nodes.py: call_model, call_tool, should_continue
+- [O] graph.py: StateGraph 조립 (Gemini 3.1 Pro Preview + tool binding, dotenv API 키)
+- [O] agent_api.py: run_recovery — multimodal HumanMessage(텍스트+이미지×2) → graph 실행
+- [O] recovery_logger.py: ReAct 루프 각 단계 구조화 로그 (llm_reasoning, tool_call, tool_result) → JSON 저장
+- [O] Agent Server 단독 테스트: mock anomaly report → Gemini가 extract_coordinates() → execute_action(recover) 정상 호출 확인
 
 ### Phase 4: End-to-End 통합
 
@@ -510,4 +511,5 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 - [ ] 시나리오 C 설계 및 구현 (시간 여유 시)
 - [ ] 미정의 시나리오 3~5개에 대한 Gemini 진단 정확도 테스트
 - [ ] rule-based baseline vs MLLM-augmented 비교 데이터 수집
+- [ ] 웹 대시보드: ReAct 루프 시각화 (수신 이미지, Gemini 추론 과정, tool 호출, 복구 결과)
 - [ ] 데모 시나리오 구성 및 시연 준비
