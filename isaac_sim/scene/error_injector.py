@@ -28,15 +28,23 @@ def inject_offset(cube: DynamicCuboid, offset_xy: np.ndarray | None = None) -> n
     return offset_xy
 
 
-def inject_absence(cube: DynamicCuboid) -> np.ndarray:
-    """시나리오 B — 큐브를 작업 영역 밖으로 이동.
+def inject_absence(cube: DynamicCuboid, displaced_pos: np.ndarray | None = None) -> np.ndarray:
+    """시나리오 B — 큐브를 작업대 위이지만 카메라에서 보이지 않는 위치로 이동.
+
+    로봇 팔 뒤쪽(반대편)이나 작업대 가장자리로 이동시켜,
+    현재 카메라 시야에서는 안 보이지만 explore로 찾을 수 있는 위치.
 
     Args:
         cube: 이동할 큐브 객체.
+        displaced_pos: 이동 위치. None이면 작업대 반대편으로 이동.
 
     Returns:
         큐브가 이동된 위치.
     """
-    hidden_pos = np.array([2.0, 2.0, 0.0])
-    cube.set_world_pose(position=hidden_pos)
-    return hidden_pos
+    if displaced_pos is None:
+        # 작업대 위, 원래 위치 반대편 (로봇 팔 뒤쪽)
+        # 작업대: x=[0.2, 0.8], y=[-0.4, 0.4], 상단 z=0.42
+        displaced_pos = np.array([0.7, 0.25, 0.44])
+
+    cube.set_world_pose(position=displaced_pos)
+    return displaced_pos
