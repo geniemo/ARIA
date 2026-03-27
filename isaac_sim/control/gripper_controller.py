@@ -21,12 +21,12 @@ class GripperController:
     def open(self) -> None:
         """gripper 열기 명령."""
         self._gripper.open()
-        self._reset_settle()
+        self.reset_settle()
 
     def close(self) -> None:
         """gripper 닫기 명령."""
         self._gripper.close()
-        self._reset_settle()
+        self.reset_settle()
 
     def get_width(self) -> float:
         """현재 gripper width (두 finger 간격 합)."""
@@ -44,6 +44,7 @@ class GripperController:
         self._prev_width = current_width
         return self._settle_count >= self.SETTLE_STEPS
 
-    def _reset_settle(self) -> None:
+    def reset_settle(self) -> None:
+        """settle 판정 상태 초기화."""
         self._prev_width = None
         self._settle_count = 0
