@@ -18,8 +18,8 @@ IMAGE_WIDTH = 640
 IMAGE_HEIGHT = 480
 
 # 작업대 상단 Z (큐브가 놓이는 높이)
-TABLE_TOP_Z = 0.42
-CUBE_Z = 0.44  # 큐브 중심 높이
+TABLE_TOP_Z = 0.40  # table position[2] + scale[2]/2 = 0.2 + 0.2
+CUBE_Z = 0.44  # 큐브 중심 높이 (0.42 + 0.04/2), scene_builder 기준
 
 # FOV 기반 픽셀 → 월드 변환 계수
 # Isaac Sim Camera focal_length=18, horizontal_aperture=36 → FOV ≈ 90°

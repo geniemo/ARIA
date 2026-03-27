@@ -1,15 +1,10 @@
 """ARIA Agent Tools — extract_coordinates + execute_action."""
 
-import base64
-import io
-
 import httpx
-import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from contracts.api_specs import SIM_BASE_URL, ENDPOINT_EXECUTE_ACTION
-from contracts.skill_primitives import ActionIntent
 
 
 # --- extract_coordinates ---
