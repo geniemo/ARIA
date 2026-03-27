@@ -89,9 +89,11 @@ def run_pick_place(
     grasp_orientation: np.ndarray,
 ) -> tuple[TaskState, list]:
     """P&P 실행. (state, execution_log) 반환."""
-    # gripper 열기 (이전 시도에서 닫혀있을 수 있음)
-    franka.gripper.open()
-    for _ in range(30):
+    # gripper 완전히 열기 (이전 시도에서 닫혀있을 수 있음)
+    gripper_ctrl_tmp = GripperController(franka.gripper)
+    gripper_ctrl_tmp.open()
+    while not gripper_ctrl_tmp.is_done():
+        franka.gripper.open()
         world.step(render=True)
 
     rrt = RRTController(robot_articulation=franka, physics_dt=1.0 / 60.0)
