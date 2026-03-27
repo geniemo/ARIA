@@ -506,13 +506,10 @@ Lula RRT는 경로를 사전에 계획하고, 보간된 trajectory를 `Articulat
 - [O] Overhead 카메라 캡처를 replicator annotator로 통일 (Camera API RGB=0 문제 해결)
 - [O] explore 후 overhead 이미지 자동 업데이트 → extract_coordinates가 최신 이미지 사용
 - [O] Gemini 미탐색 시 피드백 재시도 로직 (에이전트 자율성 유지)
-- [ ] 실패 후 재진단 루프 동작 확인: success=false → LLM 재판단 → 재시도
-- [ ] 복구 불가 케이스 처리: 최대 시도 횟수 초과 시 graceful termination
+- [O] 실패 후 재진단 루프 동작 확인: extract_coordinates 실패 → explore → 재추출 → recover 성공
+- [O] 복구 불가 케이스: 프롬프트에 3회 제한 명시 + should_continue가 tool 미호출 시 END 라우팅으로 구조적 보장
 
 ### Phase 5: 시나리오 확장 + 데모 준비
 
 - [ ] 시나리오 C 설계 및 구현 (시간 여유 시)
-- [ ] 미정의 시나리오 3~5개에 대한 Gemini 진단 정확도 테스트
-- [ ] rule-based baseline vs MLLM-augmented 비교 데이터 수집
 - [ ] 웹 대시보드: ReAct 루프 시각화 (수신 이미지, Gemini 추론 과정, tool 호출, 복구 결과)
-- [ ] 데모 시나리오 구성 및 시연 준비
