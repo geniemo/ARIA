@@ -45,9 +45,10 @@ def _detect_red_cube(bgr_image: np.ndarray) -> tuple[float, float] | None:
     hsv = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
 
     # 빨간색 마스크 (HSV에서 빨간색은 0 근처와 180 근처)
-    lower_red1 = np.array([0, 100, 100])
+    # S, V 하한을 낮춰서 그림자에 가려진 큐브도 검출
+    lower_red1 = np.array([0, 50, 50])
     upper_red1 = np.array([10, 255, 255])
-    lower_red2 = np.array([160, 100, 100])
+    lower_red2 = np.array([160, 50, 50])
     upper_red2 = np.array([180, 255, 255])
 
     mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
