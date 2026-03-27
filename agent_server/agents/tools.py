@@ -6,25 +6,32 @@ from pydantic import BaseModel, Field
 
 from contracts.api_specs import SIM_BASE_URL, ENDPOINT_EXECUTE_ACTION
 
+# --- 현재 anomaly report 저장 (extract_coordinates가 접근) ---
+
+_current_report = None
+
+
+def set_current_report(report) -> None:
+    global _current_report
+    _current_report = report
+
 
 # --- extract_coordinates ---
 
-class ExtractCoordinatesInput(BaseModel):
-    image_base64: str = Field(description="Base64 encoded overhead camera image (PNG)")
-
-
-@tool("extract_coordinates", args_schema=ExtractCoordinatesInput)
-def extract_coordinates(image_base64: str) -> dict:
+@tool("extract_coordinates")
+def extract_coordinates() -> dict:
     """Extract precise (x, y, z) world coordinates of the red cube from the overhead camera image.
 
-    Uses OpenCV to detect the red cube and convert pixel coordinates
-    to world coordinates based on known camera parameters.
-    Only works with the overhead camera image.
+    Automatically uses the overhead image from the current anomaly report.
+    No input parameters needed.
     """
     from agent_server.vision.object_detector import detect_cube_from_overhead
 
+    if _current_report is None:
+        return {"error": "No anomaly report available"}
+
     try:
-        coords = detect_cube_from_overhead(image_base64)
+        coords = detect_cube_from_overhead(_current_report.overhead_image)
         return coords
     except Exception as e:
         return {"error": str(e)}

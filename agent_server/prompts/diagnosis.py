@@ -37,10 +37,9 @@ You receive:
 
 ## extract_coordinates
 Extracts the precise (x, y, z) world coordinates of the red cube from the overhead camera image using OpenCV.
-- **Input**: `image_base64` — the overhead camera image (base64 PNG)
+- **Input**: No parameters needed. Automatically uses the overhead image from the current anomaly report.
 - **Output**: `{"x": float, "y": float, "z": float}` or `{"error": "object not found"}`
 - **When to use**: When you can see the red cube in the overhead image and need exact coordinates for a recovery grasp.
-- **Important**: Only works with the overhead image. Do NOT pass the wrist image.
 
 ## execute_action
 Commands the robot to perform an action.

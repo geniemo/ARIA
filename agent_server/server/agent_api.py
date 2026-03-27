@@ -6,6 +6,7 @@ from contracts.schemas import AnomalyReport
 from agent_server.agents.state import AgentState
 from agent_server.agents.graph import build_graph
 from agent_server.agents.recovery_logger import RecoveryLog
+from agent_server.agents.tools import set_current_report
 
 
 graph = build_graph()
@@ -13,6 +14,8 @@ graph = build_graph()
 
 def run_recovery(report: AnomalyReport) -> dict:
     """anomaly report를 받아 ReAct 루프를 실행하고 결과를 반환."""
+
+    set_current_report(report)
 
     recovery_log = RecoveryLog(
         overhead_image_b64=report.overhead_image,
